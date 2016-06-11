@@ -12,13 +12,30 @@
 
 #include <X11/Xlib.h>
 
-#define TEMPERATURE    "/sys/class/hwmon/hwmon0/temp1_input"
+//For tm.tm_gmtoff, well doesn't work :/
+#define _GNU_SOURCE
+
+#define BATT_NOW        "/sys/class/power_supply/BAT0/charge_now"
+#define BATT_FULL       "/sys/class/power_supply/BAT0/charge_full"
+#define BATT_STATUS       "/sys/class/power_supply/BAT0/status"
+#define TEMPERATURE	"/sys/class/hwmon/hwmon0/temp1_input"
+
+#include <string.h>
+#include <errno.h>
+
+struct battery_status {
+	long maxLoad;
+	long curLoad;
+	char loadingState [256];
+};
+
 
 char *tzargentina = "America/Buenos_Aires";
 char *tzutc = "UTC";
 char *tzberlin = "Europe/Berlin";
 
 static Display *dpy;
+
 
 char *
 smprintf(char *fmt, ...)
@@ -74,6 +91,7 @@ mktimes(char *fmt, char *tzname)
 	return smprintf("%s", buf);
 }
 
+
 void
 setstatus(char *str)
 {
@@ -92,6 +110,65 @@ loadavg(void)
 	}
 
 	return smprintf("%.2f %.2f %.2f", avgs[0], avgs[1], avgs[2]);
+}
+
+char * readBatteryState (struct battery_status * batState)
+{
+	batState->maxLoad = 100;
+	batState->curLoad = 100;
+	//batState->loadingState = "Full";
+	batState->loadingState[0] = 'F';
+	batState->loadingState[1] = 'u';
+	batState->loadingState[2] = 'l';
+	batState->loadingState[3] = 'l';
+	batState->loadingState[4] = '\0';
+	
+	FILE *fp = NULL;
+	char s = '?';
+	char *loadingStateTemp = malloc (256);
+	int i = 0;
+
+	if (   0 == access( BATT_NOW   , R_OK)
+	&& 0 == access( BATT_FULL  , R_OK)
+	&& 0 == access( BATT_STATUS, R_OK))
+	{
+		batState->curLoad = 1;
+		batState->maxLoad = 1;
+
+		fp = fopen(BATT_NOW, "r");
+		fscanf(fp, "%ld\n", &(batState->curLoad));
+		fclose(fp);
+		fp = fopen(BATT_FULL, "r");
+		fscanf(fp, "%ld\n", &(batState->maxLoad));
+		fclose(fp);
+		fp = fopen(BATT_STATUS, "r");
+		fscanf(fp, "%s\n", loadingStateTemp);
+		fclose(fp);
+                for (i = 0; i < 256; i++ )
+		{
+			batState->loadingState[i] = loadingStateTemp [i];
+			if ( '\0' == batState->loadingState[i] )
+			{
+				break;
+			}
+		}
+		free(loadingStateTemp);
+
+
+
+		if (strcmp(batState->loadingState,"Charging") == 0)
+			s = '+';
+		if (strcmp(batState->loadingState,"Discharging") == 0)
+			s = '-';
+		if (strcmp(batState->loadingState,"Full") == 0)
+			s = '=';
+
+		return smprintf("%c%ld%%", s,((batState->curLoad)*100/(batState->maxLoad)));
+	} else {
+		fprintf(stderr, "Failed to get battery state from \"%s\"\n", BATT_NOW); 
+		exit(1);
+	}
+	return "\0";
 }
 
 long readTemperature ()
@@ -115,7 +192,12 @@ main(void)
 	char *status;
 	char *avgs;
 	char *tmbln;
+	char *batteryStatus;
+	batteryStatus = " ";
 	long temperature = 0;
+	struct battery_status * batState = malloc (sizeof(long) * 2 + sizeof(char*));
+
+	//TODO: read the system's configured timezone from /etc/timezone
 
 	if (!(dpy = XOpenDisplay(NULL))) {
 		fprintf(stderr, "dwmstatus: cannot open display.\n");
@@ -124,21 +206,28 @@ main(void)
 
 	for (;;sleep(10)) {
 		avgs = loadavg();
+
 		tmbln = mktimes("%a %Y-%b-%d %H:%M:%S (%z)", tzberlin);
 
+		batteryStatus = readBatteryState (batState);
 		temperature = readTemperature ();
+		char * netstats_string = getNetstatus(transferStats, parse_vars, readBuf);
 
-		status = smprintf("%d C L:%s %s",
-				temperature,
-				avgs, tmbln);
+
+		status = smprintf("%d C %s L:%s %s",
+			temperature,
+			batteryStatus,
+			avgs, tmbln);
 		setstatus(status);
 		free(avgs);
 		free(tmbln);
 		free(status);
 	}
-
 	XCloseDisplay(dpy);
 
 	return 0;
 }
+
+
+
 
