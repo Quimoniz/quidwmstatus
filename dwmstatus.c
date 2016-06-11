@@ -97,8 +97,6 @@ main(void)
 {
 	char *status;
 	char *avgs;
-	char *tmar;
-	char *tmutc;
 	char *tmbln;
 
 	if (!(dpy = XOpenDisplay(NULL))) {
@@ -106,18 +104,14 @@ main(void)
 		return 1;
 	}
 
-	for (;;sleep(90)) {
+	for (;;sleep(10)) {
 		avgs = loadavg();
-		tmar = mktimes("%H:%M", tzargentina);
-		tmutc = mktimes("%H:%M", tzutc);
-		tmbln = mktimes("KW %W %a %d %b %H:%M %Z %Y", tzberlin);
+		tmbln = mktimes("%a %Y-%b-%d %H:%M:%S (%z)", tzberlin);
 
 		status = smprintf("L:%s A:%s U:%s %s",
-				avgs, tmar, tmutc, tmbln);
+				avgs, tmbln);
 		setstatus(status);
 		free(avgs);
-		free(tmar);
-		free(tmutc);
 		free(tmbln);
 		free(status);
 	}
