@@ -19,9 +19,11 @@
 #define BATT_FULL       "/sys/class/power_supply/BAT0/charge_full"
 #define BATT_STATUS       "/sys/class/power_supply/BAT0/status"
 #define TEMPERATURE	"/sys/class/hwmon/hwmon0/temp1_input"
+#define NETWORK "/proc/net/dev"
 
 #include <string.h>
 #include <errno.h>
+#include <netstatus.c>
 
 struct battery_status {
 	long maxLoad;
@@ -189,43 +191,51 @@ long readTemperature ()
 int
 main(void)
 {
-	char *status;
-	char *avgs;
-	char *tmbln;
-	char *batteryStatus;
-	batteryStatus = " ";
-	long temperature = 0;
-	struct battery_status * batState = malloc (sizeof(long) * 2 + sizeof(char*));
+  char *status;
+  char *avgs;
+  char *tmbln;
+  char *batteryStatus;
+  batteryStatus = " ";
+  long temperature = 0;
+  struct parsing_var parse_vars = { .parsingStatus=0, .curLineLength=0, .tokenCount=0, };
+  char * readBuf = malloc(sizeof(char) * READ_BUF_SIZE);
+  parse_vars.curLineBuf = malloc(sizeof(char) * READ_BUF_SIZE);
+  parse_vars.bytesTransferedStr = malloc(sizeof(char) * READ_BUF_SIZE);
+  parse_vars.curTokenStr = malloc(sizeof(char) * READ_BUF_SIZE);
+  struct battery_status * batState = malloc (sizeof(long) * 2 + sizeof(char*));
+  struct transfer_datum * transferStats = malloc (sizeof(struct transfer_datum) * COUNT_PAST);
 
-	//TODO: read the system's configured timezone from /etc/timezone
+  //TODO: read the system's configured timezone from /etc/timezone
 
-	if (!(dpy = XOpenDisplay(NULL))) {
-		fprintf(stderr, "dwmstatus: cannot open display.\n");
-		return 1;
-	}
+  if (!(dpy = XOpenDisplay(NULL))) {
+	fprintf(stderr, "dwmstatus: cannot open display.\n");
+	return 1;
+  }
 
-	for (;;sleep(10)) {
-		avgs = loadavg();
+  for (;;sleep(10)) {
+  	avgs = loadavg();
 
-		tmbln = mktimes("%a %Y-%b-%d %H:%M:%S (%z)", tzberlin);
+  	tmbln = mktimes("%a %Y-%b-%d %H:%M:%S (%z)", tzberlin);
+  	
+  	batteryStatus = readBatteryState (batState);
+  	temperature = readTemperature ();
+  	char * netstats_string = getNetstatus(transferStats, parse_vars, readBuf);
 
-		batteryStatus = readBatteryState (batState);
-		temperature = readTemperature ();
-		char * netstats_string = getNetstatus(transferStats, parse_vars, readBuf);
 
+  	status = smprintf("%s %d C %s L:%s %s",
+  		netstats_string,
+  		temperature,
+  		batteryStatus,
+  		avgs, tmbln);
+  	setstatus(status);
+  	free(netstats_string);
+  	free(avgs);
+  	free(tmbln);
+  	free(status);
+  }
+  XCloseDisplay(dpy);
 
-		status = smprintf("%d C %s L:%s %s",
-			temperature,
-			batteryStatus,
-			avgs, tmbln);
-		setstatus(status);
-		free(avgs);
-		free(tmbln);
-		free(status);
-	}
-	XCloseDisplay(dpy);
-
-	return 0;
+  return 0;
 }
 
 
