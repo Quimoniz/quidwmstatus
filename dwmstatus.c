@@ -12,6 +12,8 @@
 
 #include <X11/Xlib.h>
 
+#define TEMPERATURE    "/sys/class/hwmon/hwmon0/temp1_input"
+
 char *tzargentina = "America/Buenos_Aires";
 char *tzutc = "UTC";
 char *tzberlin = "Europe/Berlin";
@@ -92,12 +94,28 @@ loadavg(void)
 	return smprintf("%.2f %.2f %.2f", avgs[0], avgs[1], avgs[2]);
 }
 
+long readTemperature ()
+{
+	long temperature = 0;
+	FILE *fp = NULL;
+	if ((fp = fopen(TEMPERATURE, "r"))) {
+		fscanf(fp, "%ld\n", &temperature);
+		fclose (fp);
+		temperature = temperature / 1000;
+	} else {
+		fprintf(stderr, "Failed to get temperature value from \"%s\"\n", TEMPERATURE);
+		exit(1);
+	}
+	return temperature;
+}
+
 int
 main(void)
 {
 	char *status;
 	char *avgs;
 	char *tmbln;
+	long temperature = 0;
 
 	if (!(dpy = XOpenDisplay(NULL))) {
 		fprintf(stderr, "dwmstatus: cannot open display.\n");
@@ -108,7 +126,10 @@ main(void)
 		avgs = loadavg();
 		tmbln = mktimes("%a %Y-%b-%d %H:%M:%S (%z)", tzberlin);
 
-		status = smprintf("L:%s A:%s U:%s %s",
+		temperature = readTemperature ();
+
+		status = smprintf("%d C L:%s %s",
+				temperature,
 				avgs, tmbln);
 		setstatus(status);
 		free(avgs);
