@@ -20,6 +20,7 @@
 #define BATT_STATUS       "/sys/class/power_supply/BAT0/status"
 #define TEMPERATURE	"/sys/class/hwmon/hwmon0/temp1_input"
 #define NETWORK "/proc/net/dev"
+#define SYSTEM_TIMEZONE    "/etc/timezone"
 
 #include <string.h>
 #include <errno.h>
@@ -33,8 +34,9 @@ struct battery_status {
 
 
 char *tzargentina = "America/Buenos_Aires";
-char *tzutc = "UTC";
 char *tzberlin = "Europe/Berlin";
+//Default-value and Fallback
+char *tzutc = "UTC";
 
 static Display *dpy;
 
@@ -188,15 +190,35 @@ long readTemperature ()
 	return temperature;
 }
 
+void readSystemTimezone (char * timezone)
+{
+	FILE * fp;
+
+	if ( 0 == access (SYSTEM_TIMEZONE, R_OK) )
+	{
+		fp = fopen (SYSTEM_TIMEZONE, "r");
+		//read time zone
+		fscanf (fp, "%s\n", timezone);
+		fclose (fp);
+	} else {
+	        free(timezone);
+		timezone = malloc (strlen(tzutc) + 1);
+		strcpy(timezone, tzutc);
+	}
+}
+
 int
 main(void)
 {
+  char *tzSystem;
   char *status;
   char *avgs;
   char *tmbln;
   char *batteryStatus;
   batteryStatus = " ";
   long temperature = 0;
+
+  tzSystem = malloc (50);
   struct parsing_var parse_vars = { .parsingStatus=0, .curLineLength=0, .tokenCount=0, };
   char * readBuf = malloc(sizeof(char) * READ_BUF_SIZE);
   parse_vars.curLineBuf = malloc(sizeof(char) * READ_BUF_SIZE);
@@ -205,12 +227,12 @@ main(void)
   struct battery_status * batState = malloc (sizeof(long) * 2 + sizeof(char*));
   struct transfer_datum * transferStats = malloc (sizeof(struct transfer_datum) * COUNT_PAST);
 
-  //TODO: read the system's configured timezone from /etc/timezone
-
   if (!(dpy = XOpenDisplay(NULL))) {
 	fprintf(stderr, "dwmstatus: cannot open display.\n");
 	return 1;
   }
+
+  readSystemTimezone(tzSystem);
 
   for (;;sleep(10)) {
   	avgs = loadavg();
@@ -233,6 +255,9 @@ main(void)
   	free(tmbln);
   	free(status);
   }
+
+  free(tzSystem);
+
   XCloseDisplay(dpy);
 
   return 0;
