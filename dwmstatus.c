@@ -219,11 +219,7 @@ main(void)
   long temperature = 0;
 
   tzSystem = malloc (50);
-  struct parsing_var parse_vars = { .parsingStatus=0, .curLineLength=0, .tokenCount=0, };
-  char * readBuf = malloc(sizeof(char) * READ_BUF_SIZE);
-  parse_vars.curLineBuf = malloc(sizeof(char) * READ_BUF_SIZE);
-  parse_vars.bytesTransferedStr = malloc(sizeof(char) * READ_BUF_SIZE);
-  parse_vars.curTokenStr = malloc(sizeof(char) * READ_BUF_SIZE);
+  struct parsing_var parse_vars = { .lineNumber = 0, };
   struct battery_status * batState = malloc (sizeof(long) * 2 + sizeof(char*));
   struct transfer_datum * transferStats = malloc (sizeof(struct transfer_datum) * COUNT_PAST);
 
@@ -241,7 +237,7 @@ main(void)
   	
   	batteryStatus = readBatteryState (batState);
   	temperature = readTemperature ();
-  	char * netstats_string = getNetstatus(transferStats, parse_vars, readBuf);
+  	char * netstats_string = getNetstatus(transferStats, parse_vars);
 
 
   	status = smprintf("%s %d C %s L:%s %s",
